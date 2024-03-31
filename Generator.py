@@ -23,7 +23,7 @@ class PointProcess:
         self.M = np.zeros((4,1))
         self.M[:2] = self.mu
         self.phi = np.zeros((4,4))
-        self.update_phi(0)
+        self.__update_phi(0)
         self.intensity = self.M.copy()
 
         # Initialize the time of the point process
@@ -39,7 +39,7 @@ class PointProcess:
         
         return None
 
-    def phiTs(self, t) -> float:
+    def __phiTs(self, t) -> float:
         """
         Compute the phiTs function at time t
 
@@ -53,9 +53,12 @@ class PointProcess:
         - float
             The value of the function at time t
         """
-        return 0.03 * np.exp(-5 * t / 100)
+        if type(t) == np.ndarray:
+            return np.sum(0.03 * np.exp(-5 * t / 100))
+        else:
+            return 0.03 * np.exp(-5 * t / 100)
 
-    def phiNc(self, t) -> float:
+    def __phiNc(self, t) -> float:
         """
         Compute the phiNc function at time t
 
@@ -69,9 +72,12 @@ class PointProcess:
         - float
             The value of the function at time t
         """
-        return 0.05 * np.exp(-t / 10)
+        if type(t) == np.ndarray:
+            return np.sum(0.05 * np.exp(-t / 10))
+        else:
+            return 0.05 * np.exp(-t / 10)
 
-    def phiIs(self, t) -> float:
+    def __phiIs(self, t) -> float:
         """
         Compute the phiIs function at time t
 
@@ -85,9 +91,12 @@ class PointProcess:
         - float
             The value of the function at time t
         """
-        return 25 * np.exp(-100 * t) # Becareful with the value of the intensity here (MAYBE THERE IS A MISTAKE)
+        if type(t) == np.ndarray:
+            return np.sum(25 * np.exp(-100 * t))
+        else:
+            return 25 * np.exp(-100 * t)     
 
-    def phiFc(self, t) -> float:
+    def __phiFc(self, t) -> float:
         """
         Compute the phiFc function at time t
 
@@ -101,9 +110,12 @@ class PointProcess:
         - float
             The value of the function at time t
         """
-        return 0.1 * np.exp(-t / 2)
+        if type(t) == np.ndarray:
+            return np.sum(0.1 * np.exp(-t / 2))
+        else:
+            return 0.1 * np.exp(-t / 2)
 
-    def update_phi(self, t) -> None:
+    def __update_phi(self, t) -> None:
         """
         Update the phi matrix at time t
 
@@ -116,17 +128,17 @@ class PointProcess:
         --------
         - None
         """
-        self.phi[0, 0] = self.phiTs(t)
+        self.phi[0, 0] = self.__phiTs(t)
         self.phi[1, 1] = self.phi[0,0]
-        self.phi[2, 3] = self.phiNc(t)
+        self.phi[2, 3] = self.__phiNc(t)
         self.phi[3, 2] = self.phi[2, 3]
-        self.phi[2, 0] = self.phiIs(t)
+        self.phi[2, 0] = self.__phiIs(t)
         self.phi[3, 1] = self.phi[2, 0]
-        self.phi[0, 3] = self.phiFc(t)
+        self.phi[0, 3] = self.__phiFc(t)
         self.phi[1, 2] = self.phi[0, 3]
         return None
 
-    def update_intensities(self, t: float) -> None:
+    def _update_intensities(self, t: float) -> None:
         """
         Update the intensity matrix at time t
 
@@ -143,11 +155,75 @@ class PointProcess:
         for i in range(4):
             basisvector = np.zeros((4,1))
             basisvector[i] = 1
-            for jumptime in self.jumptimes[i]:
-                if jumptime != 0:
-                    self.update_phi(t - jumptime)
-                    self.intensity += self.phi @ basisvector
+            if self.jumptimes[i].size != 0:
+                self.__update_phi(t - self.jumptimes[i])
+                self.intensity += self.phi @ basisvector
         return None
+    
+    def __reset(self) -> None:
+        """
+        reset the point process
+
+        Parameters:
+        -----------
+        - None
+
+        Returns:
+        --------
+        - None
+        """
+        # Initialize the intensity matrix
+        self.intensity = self.M.copy()
+
+        # Intialize the sequence of events for each point process (T-, T+, N-, N+)
+        self.jumptimes = {0: np.empty((0,0), dtype=float), 1: np.empty((0,0), dtype=float), 2: np.empty((0,0), dtype=float), 3: np.empty((0,0), dtype=float)}
+        self.alljumptimesN = np.empty((0,0), dtype=float)
+        self.alljumptimesT = np.empty((0,0), dtype=float)
+
+        # Initialize the counting process (T-, T+, N-, N+)
+        self.countingprocess = {0: np.zeros((1,1), dtype=int), 1: np.zeros((1,1), dtype=int), 2: np.zeros((1,1), dtype=int), 3: np.zeros((1,1), dtype=int)}
+
+        return None
+
+
+    def __create_Ut(self) -> None:
+        """
+        Create the difference of the counting process of the T+ and T- processes by interpolate between the different jumps
+
+        Parameters:
+        -----------
+        - None
+
+        Returns:
+        --------
+        - None
+        """
+        interpT_minus = interp1d(self.jumptimes[0],self.countingprocess[0], kind='nearest', fill_value="extrapolate")
+        T_minus = interpT_minus(self.alljumptimesT)
+        interpT_plus = interp1d(self.jumptimes[1],self.countingprocess[1], kind='nearest', fill_value="extrapolate")
+        T_plus = interpT_plus(self.alljumptimesT)
+        self.Ut = T_plus - T_minus
+        return None
+
+    def __create_Xt(self) -> None:
+        """
+        Create the difference of the counting process of the N+ and N- processes by interpolate between the different jumps
+
+        Parameters:
+        -----------
+        - None
+
+        Returns:
+        --------
+        - None
+        """
+        interpN_minus = interp1d(self.jumptimes[2],self.countingprocess[2], kind='nearest', fill_value="extrapolate")
+        N_minus = interpN_minus(self.alljumptimesN)
+        interpN_plus = interp1d(self.jumptimes[3],self.countingprocess[3], kind='nearest', fill_value="extrapolate")
+        N_plus = interpN_plus(self.alljumptimesN)
+        self.Xt = N_plus - N_minus
+        return None
+
 
     def simulate(self) -> None:
         """
@@ -160,19 +236,20 @@ class PointProcess:
         Returns:
         --------
         - None
-        """
+        """   
+        self.__reset()
         s = 0 
         intensitymax = np.sum(self.intensity)
         lastjump = None
         while s < self.T:
             if s > 0:
-                self.update_intensities(s)
+                self._update_intensities(s)
                 intensitymax = np.sum(self.intensity)
 
             # Generate the time of the next event
             w = np.random.exponential(1 / intensitymax)
             s += w
-            self.update_intensities(s)
+            self._update_intensities(s)
 
             if s > self.T:
                 break
@@ -194,9 +271,13 @@ class PointProcess:
                 else:
                     self.alljumptimesN = np.append(self.alljumptimesN, s)
                 lastjump = k
+        
+        self.__create_Xt()
+        self.__create_Ut()
+
         return None
 
-    def plot(self, plot:str) -> None:
+    def plot(self, plot: str="both") -> None:
         """
         Plot the counting process. This can plot the counting process of the T process, the N process or both
 
@@ -216,50 +297,23 @@ class PointProcess:
             plt.figure(figsize=(12, 4))
             plt.grid()
             if plot == "N":
-                interpN_minus = interp1d(self.jumptimes[2],self.countingprocess[2], kind='nearest', fill_value="extrapolate")
-                N_minus = interpN_minus(self.alljumptimesN)
-                interpN_plus = interp1d(self.jumptimes[3],self.countingprocess[3], kind='nearest', fill_value="extrapolate")
-                N_plus = interpN_plus(self.alljumptimesN)
-                diff = N_plus - N_minus
-                plt.step(self.alljumptimesN, diff,c="black", linewidth=.5)
+                plt.step(self.alljumptimesN, self.Xt,c="black", linewidth=.5)
                 plt.ylabel('Xt')
             else:
-                interpT_minus = interp1d(self.jumptimes[0],self.countingprocess[0], kind='nearest', fill_value="extrapolate")
-                T_minus = interpT_minus(self.alljumptimesT)
-                interpT_plus = interp1d(self.jumptimes[1],self.countingprocess[1], kind='nearest', fill_value="extrapolate")
-                T_plus = interpT_plus(self.alljumptimesT)
-                diff = T_plus - T_minus
-                plt.step(self.alljumptimesT, diff,c="black", linewidth=.5)
+                plt.step(self.alljumptimesT, self.Ut,c="black", linewidth=.5)
                 plt.ylabel('Ut')
             plt.xlabel('Time (s)')
 
         else:
             fig, ax = plt.subplots(2, 1, figsize=(12, 8))
-            interpT_minus = interp1d(self.jumptimes[0],self.countingprocess[0], kind='nearest', fill_value="extrapolate")
-            T_minus = interpT_minus(self.alljumptimesT)
-            interpT_plus = interp1d(self.jumptimes[1],self.countingprocess[1], kind='nearest', fill_value="extrapolate")
-            T_plus = interpT_plus(self.alljumptimesT)
-            diff1 = T_plus - T_minus
-            ax[0].step(self.alljumptimesT, diff1,c="black", linewidth=.5)
+            ax[0].step(self.alljumptimesT, self.Ut,c="black", linewidth=.5)
             ax[0].set_ylabel('Ut')
             ax[0].set_xlabel('Time (s)')
             ax[0].grid()
-            interpN_minus = interp1d(self.jumptimes[2],self.countingprocess[2], kind='nearest', fill_value="extrapolate")
-            N_minus = interpN_minus(self.alljumptimesN)
-            interpN_plus = interp1d(self.jumptimes[3],self.countingprocess[3], kind='nearest', fill_value="extrapolate")
-            N_plus = interpN_plus(self.alljumptimesN)
-            diff2 = N_plus - N_minus
-            ax[1].step(self.alljumptimesN, diff2,c="black", linewidth=.5)
+            ax[1].step(self.alljumptimesN, self.Xt,c="black", linewidth=.5)
             ax[1].set_ylabel('Xt')
             ax[1].set_xlabel('Time (s)')
             ax[1].grid()
 
         plt.show()
         return None
-
-
-
-
-
-
-
