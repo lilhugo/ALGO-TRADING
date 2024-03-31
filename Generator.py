@@ -138,7 +138,7 @@ class PointProcess:
         self.phi[1, 2] = self.phi[0, 3]
         return None
 
-    def _update_intensities(self, t: float) -> None:
+    def __update_intensities(self, t: float) -> None:
         """
         Update the intensity matrix at time t
 
@@ -243,13 +243,13 @@ class PointProcess:
         lastjump = None
         while s < self.T:
             if s > 0:
-                self._update_intensities(s)
+                self.__update_intensities(s)
                 intensitymax = np.sum(self.intensity)
 
             # Generate the time of the next event
             w = np.random.exponential(1 / intensitymax)
             s += w
-            self._update_intensities(s)
+            self.__update_intensities(s)
 
             if s > self.T:
                 break
