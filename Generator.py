@@ -240,7 +240,6 @@ class PointProcess:
         self.__reset()
         s = 0 
         intensitymax = np.sum(self.intensity)
-        lastjump = None
         while s < self.T:
             if s > 0:
                 self.__update_intensities(s)
@@ -270,12 +269,54 @@ class PointProcess:
                     self.alljumptimesT = np.append(self.alljumptimesT, s)
                 else:
                     self.alljumptimesN = np.append(self.alljumptimesN, s)
-                lastjump = k
         
         self.__create_Xt()
         self.__create_Ut()
 
         return None
+    
+    def simulate_realtime(self, s: float,U, X) -> None:
+        if s == 0:
+            self.__reset()
+        intensitymax = np.sum(self.intensity)
+        if s < self.T:
+            if s > 0:
+                self.__update_intensities(s)
+                intensitymax = np.sum(self.intensity)
+
+            # Generate the time of the next event
+            w = np.random.exponential(1 / intensitymax)
+            s += w
+            self.__update_intensities(s)
+
+            # Generate the type of the event
+            D = np.random.uniform(0, 1)
+            if D <= np.sum(self.intensity) / intensitymax:
+                k = 0
+                while D * intensitymax > np.sum(self.intensity[:k+1]):
+                    k += 1
+                if self.countingprocess[k][0] == 0:
+                    self.countingprocess[k][0] = 1
+                    self.jumptimes[k] = np.append(self.jumptimes[k], s)
+                else:
+                    self.countingprocess[k] = np.append(self.countingprocess[k], self.countingprocess[k][-1] + 1)
+                    self.jumptimes[k] = np.append(self.jumptimes[k], s)
+                if k == 0 or k == 1:
+                    self.alljumptimesT = np.append(self.alljumptimesT, s)
+                    if k == 0:
+                        U -= 1
+                    else:
+                        U += 1
+
+                else:
+                    self.alljumptimesN = np.append(self.alljumptimesN, s)
+                    if k == 2:
+                        X -= 1
+                    else:
+                        X += 1
+
+        return s, U, X
+
 
     def plot(self, plot: str="both") -> None:
         """

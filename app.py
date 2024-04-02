@@ -1,91 +1,137 @@
-import sys
-import random
-import matplotlib
-from matplotlib.colors import ListedColormap, BoundaryNorm
-from matplotlib.collections import LineCollection
-
-import numpy as np
-matplotlib.use('Qt5Agg')
-
-from PySide6.QtWidgets import QMainWindow, QApplication
-from PySide6.QtCore import QTimer
-
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.figure import Figure
-
+from Packages import *
+from Generator import PointProcess
 
 class MplCanvas(FigureCanvas):
 
-    def __init__(self, parent=None, width=5, height=4, dpi=100):
-        fig = Figure(figsize=(width, height), dpi=dpi)
-        self.axes = fig.add_subplot(111)
+    def __init__(self, parent=None) -> None:
+        """
+        Initialize the canvas with two subplots
+
+        Parameters
+        ----------
+        - parent : QMainWindow, optional
+            Parent widget, by default None
+        
+        Returns
+        -------
+        - None
+        """
+        fig, (self.axe1, self.axe2) = plt.subplots(nrows=2, sharex=True)
+        fig.tight_layout()
+        self.format_plot()
         super(MplCanvas, self).__init__(fig)
+        return None
+    
+    def format_plot(self) -> None:
+        """
+        Format the plot with grid and labels
+
+        Parameters:
+        -----------
+        - None
+
+        Returns
+        -------
+        - None
+        """
+        self.axe1.grid(True)
+        self.axe2.grid(True)
+
+        self.axe2.set_xlabel('Time (s)')
+
+        self.axe1.set_ylabel('Ut')
+        self.axe2.set_ylabel('Xt')
+        return None
 
 class MainWindow(QMainWindow):
 
-    def __init__(self, *args, **kwargs):
-        super(MainWindow, self).__init__(*args, **kwargs)
-        self.S0 = 100
-        self.deltat = 1 / 1e5
-        self.sigma = 0.2
+    def __init__(self, mu:float, T:float, *args, **kwargs) -> None:
+        """
+        Initialize the main window with the canvas and the timer
 
-        self.canvas = MplCanvas(self, width=5, height=4, dpi=100)
+        Parameters
+        ----------
+        - mu : float
+            Initial intensity of the Poisson process
+        - T : float
+            Time of simulation
+        
+        Returns
+        -------
+        - None
+        """
+        super(MainWindow, self).__init__(*args, **kwargs)
+
+        self.setWindowState(Qt.WindowMaximized)
+
+        self.canvas = MplCanvas(self)
+        self.canvas.setGeometry(0, 0, 1920, 1080)
         self.setCentralWidget(self.canvas)
-        # set the background color of the canvas
         self.canvas.setStyleSheet("background-color: black;")
 
-        # Create a range of data from 0 to 50
-        self.xdata = np.array(range(-49, 1))
-        self.ydata = np.array(np.ones(50) * self.S0)
-        self._plot_ref = None
-        self.deltatime = 100
-        self.update_plot()
-
+        self.deltatime = 10
         self.show()
 
-        # Setup a timer to trigger the redraw by calling update_plot.
+        self.mu = mu
+        self.T = T
+        self.generate = PointProcess(self.mu, self.T)
+        self.s, self.U, self.X = 0, 0, 0
+        self.s, self.U, self.X = self.generate.simulate_realtime(self.s, self.U, self.X)
+        self.times, self.Ulist, self.Xlist = np.array([0]), np.array([0]), np.array([0])
+       
         self.timer = QTimer()
         self.timer.setInterval(self.deltatime)
         self.timer.timeout.connect(self.update_plot)
+        self.init_time = timeit.default_timer()
         self.timer.start()
+        return None
 
-    def update_plot(self):
-        # Drop off the first y element, append a new one.
-        # self.yold = self.ydata
-        self.ydata = np.roll(self.ydata, -1)
-        self.ydata[-1] = self.ydata[-2] * (1 + 0.05 * self.deltat + self.sigma * np.sqrt(self.deltat) * np.random.normal(0,1))
-        self.xdata = np.roll(self.xdata, -1)
-        self.xdata[-1] = self.xdata[-2] + 1 * np.random.randint(1,3)
-        self.canvas.axes.cla()  # Clear the canvas
+    def update_plot(self) -> None:
+        """
+        Update the plot with the new values of the Poisson process
 
-        # mask_greater = np.where(self.ydata > self.yold)
-        # mask_lower = np.where(self.ydata < self.yold)
+        Parameters:
+        -----------
+        - None
 
-        # diff = self.ydata - self.yold
+        Returns
+        -------
+        - None
+        """
+        self.canvas.axe1.clear()
+        self.canvas.axe2.clear()
+        self.canvas.format_plot()
 
-        #segments = [((i, self.yold[i]), (i+1, self.ydata[i])) for i in range(len(self.ydata)-1)]
-        #cmap = ListedColormap(['r', 'g',])
-        #norm = BoundaryNorm([-10, 0, 10], cmap.N)
-        #lc = LineCollection(segments, cmap=cmap, norm=norm)
-        #lc.set_array(diff)
-        #lc.set_linewidth(2)
-        #line = self.canvas.axes.add_collection(lc)
-        self.canvas.axes.autoscale()
+        current_time = timeit.default_timer() - self.init_time
+        if current_time > self.T:
+            self.timer.stop()
+            return None
         
-        # self.canvas.axes.set_facecolor('black')
-        self.canvas.axes.step(self.xdata,self.ydata)
-        self.canvas.axes.grid(True, color='gray')
-        self.canvas.axes.set_title('Live Updating stock')
-        self.canvas.axes.set_xlabel('Time')
-        self.canvas.axes.set_ylabel('Random Number')
-        self.canvas.axes.tick_params(axis='x', colors='black')
-        self.canvas.axes.tick_params(axis='y', colors='black')
+        if current_time < self.s:
+            self.times = np.append(self.times, current_time)
+            self.Ulist = np.append(self.Ulist, self.Ulist[-1])
+            self.Xlist = np.append(self.Xlist, self.Xlist[-1])
+        else:
+            self.times = np.append(self.times, self.s)
+            self.Ulist = np.append(self.Ulist, self.U)
+            self.Xlist = np.append(self.Xlist, self.X)
+            self.s, self.U, self.X = self.generate.simulate_realtime(self.s, self.U, self.X)
+        
+        self.canvas.axe1.step(self.times, self.Ulist, 'black')
+        self.canvas.axe2.step(self.times, self.Xlist, 'black')
 
-
-        # Trigger the canvas to update and redraw.
         self.canvas.draw()
+        return None
 
-app = QApplication(sys.argv)
-w = MainWindow()
-app.exec()
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
 
+    f = open('config.json', 'r')
+    data = json.load(f)
+    mu = data["config_app"]["mu"]
+    T = data["config_app"]["T"]
+    f.close()
+
+    w = MainWindow(mu, T)
+    app.exec()
+    pass
