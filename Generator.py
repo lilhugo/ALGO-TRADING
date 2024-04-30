@@ -23,8 +23,12 @@ class PointProcess:
         self.M = np.zeros((4,1))
         self.M[:2] = self.mu
         self.phi = np.zeros((4,4))
+        self.laplace_phi = np.zeros((4,4), dtype=complex)
         self.__update_phi(0)
+        self.__laplace_phi(0)
         self.intensity = self.M.copy()
+        self.meanintensity = solve(np.eye(4) - self.laplace_phi, self.M)
+        self.meanintensity = np.real(self.meanintensity).reshape(4,)
 
         # Initialize the time of the point process
         self.T = T
@@ -37,9 +41,11 @@ class PointProcess:
         # Initialize the counting process (T-, T+, N-, N+)
         self.countingprocess = {0: np.zeros((1,1), dtype=int), 1: np.zeros((1,1), dtype=int), 2: np.zeros((1,1), dtype=int), 3: np.zeros((1,1), dtype=int)}
         
-        return None
+        print(self.__laplace_priceautocovariance(1, 1))
+        print(self.__laplace_tradeautocovariance(1, 1))
+        pass
 
-    def __phiTs(self, t) -> float:
+    def __phiTs(self, t: float) -> float:
         """
         Compute the phiTs function at time t
 
@@ -57,8 +63,27 @@ class PointProcess:
             return np.sum(0.03 * np.exp(-5 * t / 100))
         else:
             return 0.03 * np.exp(-5 * t / 100)
+        
+    def __laplace_phiTs(self, z: float) -> complex:
+        """
+        Compute the laplace transformation of the phiTs function at time t
 
-    def __phiNc(self, t) -> float:
+        Parameters:
+        -----------
+        - z: float
+            The time at which the function is evaluated
+        
+        Returns:
+        --------
+        - float
+            The value of the function at time t
+        """
+        if type(z) == np.ndarray:
+            return np.sum(0.6 / (20j * z + 1))
+        else:
+            return 0.6 / (20j * z + 1)
+
+    def __phiNc(self, t: float) -> float:
         """
         Compute the phiNc function at time t
 
@@ -77,7 +102,26 @@ class PointProcess:
         else:
             return 0.05 * np.exp(-t / 10)
 
-    def __phiIs(self, t) -> float:
+    def __laplace_phiNc(self, z: float) -> complex:
+        """
+        Compute the laplace transformation of the phiNc function at time t
+
+        Parameters:
+        -----------
+        - z: float
+            The time at which the function is evaluated
+        
+        Returns:
+        --------
+        - float
+            The value of the function at time t
+        """
+        if type(z) == np.ndarray:
+            return np.sum(0.5 / (10j * z + 1))
+        else:
+            return 0.5 / (10j * z + 1)
+        
+    def __phiIs(self, t:float) -> float:
         """
         Compute the phiIs function at time t
 
@@ -96,7 +140,26 @@ class PointProcess:
         else:
             return 25 * np.exp(-100 * t)     
 
-    def __phiFc(self, t) -> float:
+    def __laplace_phiIs(self, z: float) -> complex:
+        """
+        Compute the laplace transformation of the phiIs function at time t
+
+        Parameters:
+        -----------
+        - z: float
+            The time at which the function is evaluated
+        
+        Returns:
+        --------
+        - float
+            The value of the function at time t
+        """
+        if type(z) == np.ndarray:
+            return np.sum(25 / (1j * z + 100))
+        else:
+            return 25 / (1j * z + 100)
+        
+    def __phiFc(self, t: float) -> float:
         """
         Compute the phiFc function at time t
 
@@ -115,7 +178,26 @@ class PointProcess:
         else:
             return 0.1 * np.exp(-t / 2)
 
-    def __update_phi(self, t) -> None:
+    def __laplace_phiFc(self, z: float) -> complex:
+        """
+        Compute the laplace transformation of the phiFc function at time t
+
+        Parameters:
+        -----------
+        - z: float
+            The time at which the function is evaluated
+        
+        Returns:
+        --------
+        - float
+            The value of the function at time t
+        """
+        if type(z) == np.ndarray:
+            return np.sum(0.2 / (2j * z + 1))
+        else:
+            return 0.2 / (2j * z + 1)
+        
+    def __update_phi(self, t: float) -> None:
         """
         Update the phi matrix at time t
 
@@ -137,6 +219,140 @@ class PointProcess:
         self.phi[0, 3] = self.__phiFc(t)
         self.phi[1, 2] = self.phi[0, 3]
         return None
+    
+    def __laplace_phi(self, z: float) -> None:
+        """
+        Calculate the laplace transformation of the phi matrix at time t
+
+        Parameters:
+        -----------
+        - z: float
+            The time at which the function is evaluated
+        
+        Returns:
+        --------
+        - None
+        """
+        self.laplace_phi[0, 0] = self.__laplace_phiTs(z)
+        self.laplace_phi[1, 1] = self.laplace_phi[0, 0]
+        self.laplace_phi[2, 3] = self.__laplace_phiNc(z)
+        self.laplace_phi[3, 2] = self.laplace_phi[2, 3]
+        self.laplace_phi[2, 0] = self.__laplace_phiIs(z)
+        self.laplace_phi[3, 1] = self.laplace_phi[2, 0]
+        self.laplace_phi[0, 3] = self.__laplace_phiFc(z)
+        self.laplace_phi[1, 2] = self.laplace_phi[0, 3]
+        return None
+    
+    def __g(self, t: float, h: float) -> float:
+        """
+        Compute the g function at time t
+
+        Parameters:
+        -----------
+        - t: float
+            The time at which the function is evaluated
+        - h: float
+            The time at which the function is evaluated
+        
+        Returns:
+        --------
+        - float
+            The value of the function at time t
+        """
+        return np.maximum(0, 1 - np.abs(t) / h)
+    
+    def __laplace_g(self, z: float, h: float) -> complex:
+        """
+        Compute the laplace transformation of the g function at time h
+
+        Parameters:
+        -----------
+        - z: float
+            The value at which the function is evaluated
+        - h: float
+            The time at which the function is evaluated
+        
+        Returns:
+        --------
+        - complex
+            The value of the function at time h
+        """
+        return (-1j * h * z + - np.exp(-1j * h * z) + 1) / (h * z ** 2)
+
+    def __laplace_delta_phiT(self, z: float) -> complex:
+        """
+        Compute the laplace transformation of delta of the phiTs function at time t
+
+        Parameters:
+        -----------
+        - z: float
+            The time at which the function is evaluated
+        
+        Returns:
+        --------
+        - complex
+            The value of the function at time t
+        """
+        return self.__laplace_phiTs(z)
+    
+    def __laplace_delta_phiN(self, z: float) -> complex:
+        """
+        Compute the laplace transformation of delta of the phiNc function at time t
+
+        Parameters:
+        -----------
+        - z: float
+            The time at which the function is evaluated
+        
+        Returns:
+        --------
+        - complex
+            The value of the function at time t
+        """
+        return - self.__laplace_phiNc(z)
+    
+    def __laplace_delta_phiI(self, z: float) -> complex:
+        """
+        Compute the laplace transformation of delta of the phiIs function at time t
+
+        Parameters:
+        -----------
+        - z: float
+            The time at which the function is evaluated
+        
+        Returns:
+        --------
+        - complex
+            The value of the function at time t
+        """
+        return self.__laplace_phiIs(z)
+    
+    def __laplace_delta_phiF(self, z: float) -> complex:
+        """
+        Compute the laplace transformation of delta of the phiFc function at time t
+
+        Parameters:
+        -----------
+        - z: float
+            The time at which the function is evaluated
+        
+        Returns:
+        --------
+        - complex
+            The value of the function at time t
+        """
+        return - self.__laplace_phiFc(z)
+
+    def __laplace_priceautocovariance(self, z: float, h: float) -> complex:
+        num = 2 * self.__laplace_g(z, h) * (self.meanintensity[0] * np.linalg.norm(self.__laplace_delta_phiI(z)) ** 2 + self.meanintensity[2] * np.linalg.norm(1 - self.__laplace_delta_phiT(z)) ** 2)
+        den = np.linalg.norm((1 - self.__laplace_delta_phiT(z)) * (1 - self.__laplace_delta_phiN(z)) - self.__laplace_delta_phiI(z) * self.__laplace_delta_phiF(z)) ** 2
+        return num / den
+    
+    def __laplace_tradeautocovariance(self, z: float, h: float) -> complex:
+        num = 2 * self.__laplace_g(z, h) * (self.meanintensity[0] * np.linalg.norm(1 - self.__laplace_delta_phiN(z)) ** 2 + self.meanintensity[2] * np.linalg.norm(self.__laplace_delta_phiF(z)) ** 2)
+        den = np.linalg.norm((1 - self.__laplace_delta_phiT(z)) * (1 - self.__laplace_delta_phiN(z)) - self.__laplace_delta_phiI(z) * self.__laplace_delta_phiF(z)) ** 2
+        return num / den
+    
 
     def __update_intensities(self, t: float) -> None:
         """
@@ -185,7 +401,6 @@ class PointProcess:
 
         return None
 
-
     def __create_Ut(self) -> None:
         """
         Create the difference of the counting process of the T+ and T- processes by interpolate between the different jumps
@@ -223,8 +438,7 @@ class PointProcess:
         N_plus = interpN_plus(self.alljumptimesN)
         self.Xt = N_plus - N_minus
         return None
-
-
+    
     def simulate(self) -> None:
         """
         Simulate the point process until time T

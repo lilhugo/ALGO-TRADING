@@ -8,6 +8,7 @@ from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from scipy.linalg import solve
 from scipy.interpolate import interp1d
 import timeit
 
