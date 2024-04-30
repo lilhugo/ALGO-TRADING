@@ -1,4 +1,12 @@
-from Packages import *
+import sys
+import json
+import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from scipy.linalg import solve
+from scipy.interpolate import interp1d
+import timeit
 
 class PointProcess:
 
@@ -40,9 +48,6 @@ class PointProcess:
 
         # Initialize the counting process (T-, T+, N-, N+)
         self.countingprocess = {0: np.zeros((1,1), dtype=int), 1: np.zeros((1,1), dtype=int), 2: np.zeros((1,1), dtype=int), 3: np.zeros((1,1), dtype=int)}
-        
-        print(self.__laplace_priceautocovariance(1, 1))
-        print(self.__laplace_tradeautocovariance(1, 1))
         pass
 
     def __phiTs(self, t: float) -> float:
@@ -570,5 +575,7 @@ class PointProcess:
             ax[1].set_xlabel('Time (s)')
             ax[1].grid()
 
+        plt.suptitle('Trajectories of the cumulated trade process U and price process X', fontsize=16)
+        plt.subplots_adjust(top=0.92)
         plt.show()
         return None
