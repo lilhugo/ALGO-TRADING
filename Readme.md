@@ -14,6 +14,6 @@ We simulated point processes using the Thinning method developped in Y. Ogata, '
 
 We used the kernel estimation based on the Nystrom Method for Fredholm Equation. 
 We first created a function to estimate the g_t from 1000000s simulated Hawkes Trade event (Point Process Part).
-We computed the conditionnal expectation of the introductory equation, and the inverse of mean of the interval time. The difference of both of them is the g_t function for our time discretization.
-
+We computed the conditional expectation of the introductory equation, and the inverse of mean of the interval time. The difference of both of them is the g_t function for our time discretization.
+The computation 
 
